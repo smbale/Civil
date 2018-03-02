@@ -14,11 +14,11 @@ contract("ACL", (accounts: string[]) => {
   const defaultAccount = accounts[0];
   let acl: any;
 
-  before(async () => {
-    acl = await ACL.new();
-  });
-
-  pushState(() => {
+  pushState(
+    async () => {
+      acl = await ACL.new();
+    },
+    () => {
     describe("hasRole", () => {
       it("owner without role added doesn't have the role", async () => {
         expect(await acl.hasRole(defaultAccount, ACL_TEST_ROLE)).to.be.false();

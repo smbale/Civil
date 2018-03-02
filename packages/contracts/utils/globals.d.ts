@@ -6,12 +6,23 @@ declare module "ethereumjs-abi";
 declare namespace Chai {
   interface Assertion {
     (message?: string): Assertion;
-    bignumber: Assertion;
+    bignumber: EverythingAssertion;
   }
   // dirty-chai and chai-as-promised working together
   interface PromisedAssertion {
     (message?: string): PromisedAssertion;
-    bignumber: PromisedAssertion;
+    bignumber: EverythingAssertion;
+  }
+
+  interface EverythingAssertion extends BigNumberAssertion, PromisedAssertion {
+  }
+
+  interface BigNumberAssertion extends Assertion {
+    (message?: string): Assertion;
+    finite: BigNumberAssertion;
+    integer: BigNumberAssertion;
+    negative: BigNumberAssertion;
+    zero: BigNumberAssertion;
   }
 }
 

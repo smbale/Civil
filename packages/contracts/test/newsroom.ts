@@ -16,19 +16,21 @@ contract("Newsroom", (accounts: string[]) => {
   const defaultAccount = accounts[0];
   let newsroom: any;
 
-  before(async () => {
-    newsroom = await Newsroom.new();
-  });
-  pushState(() => {
+  pushState(
+    async () => {
+      newsroom = await Newsroom.new();
+    },
+    () => {
     describe("author", () => {
       let id: any;
 
-      before(async () => {
-        await newsroom.addRole(accounts[1], NEWSROOM_ROLE_REPORTER);
-        const tx = await newsroom.proposeContent(SOME_URI, { from: accounts[1] });
-        id = idFromEvent(tx);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          await newsroom.addRole(accounts[1], NEWSROOM_ROLE_REPORTER);
+          const tx = await newsroom.proposeContent(SOME_URI, { from: accounts[1] });
+          id = idFromEvent(tx);
+        },
+        () => {
         it("returns 0x0 on non-existent content", async () => {
           const is0x0 = is0x0Address(await newsroom.author(9999));
           expect(is0x0).to.be.true();
@@ -57,11 +59,12 @@ contract("Newsroom", (accounts: string[]) => {
     describe("uri", () => {
       let id: any;
 
-      before(async () => {
-        const tx = await newsroom.proposeContent(SOME_URI);
-        id = idFromEvent(tx);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          const tx = await newsroom.proposeContent(SOME_URI);
+          id = idFromEvent(tx);
+        },
+        () => {
         it("returns empty string on non-existen content", async () => {
           await expect(newsroom.uri(9999)).to.eventually.be.equal("");
         });
@@ -79,7 +82,7 @@ contract("Newsroom", (accounts: string[]) => {
         it("returns empty string on denied content", async () => {
           await newsroom.denyContent(id);
 
-          await expect(newsroom.uri(id)).to.eventually.be.equal("");
+          await expect(newsroom.uri(id)).to.eventually.be.empty();
         });
       });
     });
@@ -88,12 +91,13 @@ contract("Newsroom", (accounts: string[]) => {
       let id: any;
       let timestamp: any;
 
-      before(async () => {
-        const tx = await newsroom.proposeContent(SOME_URI);
-        id = idFromEvent(tx);
-        timestamp = await timestampFromTx(web3, tx.receipt);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          const tx = await newsroom.proposeContent(SOME_URI);
+          id = idFromEvent(tx);
+          timestamp = await timestampFromTx(web3, tx.receipt);
+        },
+        () => {
         it("returns proper timestamp", async () => {
           expect(timestamp).not.to.be.bignumber.equal(0);
 
@@ -107,13 +111,14 @@ contract("Newsroom", (accounts: string[]) => {
         });
 
         it("returns zero on not existent content", async () => {
-          await expect(newsroom.timestamp(9999)).to.eventually.be.bignumber.equal(0);
+          console.log((await newsroom.timestamp(9999)).toString());
+          return expect(newsroom.timestamp(9999)).to.eventually.be.bignumber.zero();
         });
 
         it("returns zero on denied content", async () => {
           await newsroom.denyContent(id);
 
-          await expect(newsroom.timestamp(id)).to.eventually.be.bignumber.equal(0);
+          await expect(newsroom.timestamp(id)).to.eventually.be.bignumber.zero();
         });
       });
     });
@@ -121,11 +126,12 @@ contract("Newsroom", (accounts: string[]) => {
     describe("isProposed", () => {
       let id: any;
 
-      before(async () => {
-        const tx = await newsroom.proposeContent(SOME_URI);
-        id = idFromEvent(tx);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          const tx = await newsroom.proposeContent(SOME_URI);
+          id = idFromEvent(tx);
+        },
+        () => {
         it("returns true on proposed content", async () => {
           await expect(newsroom.isProposed(id)).to.eventually.be.true();
         });
@@ -151,11 +157,12 @@ contract("Newsroom", (accounts: string[]) => {
     describe("isApproved", () => {
       let id: any;
 
-      before(async () => {
-        const tx = await newsroom.proposeContent(SOME_URI);
-        id = idFromEvent(tx);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          const tx = await newsroom.proposeContent(SOME_URI);
+          id = idFromEvent(tx);
+        },
+        () => {
         it("returns false on proposed content", async () => {
           await expect(newsroom.isApproved(id)).to.eventually.be.false();
         });
@@ -213,11 +220,12 @@ contract("Newsroom", (accounts: string[]) => {
     describe("approveContent", () => {
       let id: any;
 
-      before(async () => {
-        const tx = await newsroom.proposeContent(SOME_URI);
-        id = idFromEvent(tx);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          const tx = await newsroom.proposeContent(SOME_URI);
+          id = idFromEvent(tx);
+        },
+        () => {
         it("allows approving", async () => {
           await expect(newsroom.approveContent(id)).to.eventually.be.fulfilled();
           expect(await newsroom.isApproved(id)).to.be.true();
@@ -277,11 +285,12 @@ contract("Newsroom", (accounts: string[]) => {
     describe("denyContent", () => {
       let id: any;
 
-      before(async () => {
-        const tx = await newsroom.proposeContent(SOME_URI);
-        id = idFromEvent(tx);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          const tx = await newsroom.proposeContent(SOME_URI);
+          id = idFromEvent(tx);
+        },
+        () => {
         it("allows denying", async () => {
           await expect(newsroom.denyContent(id)).to.eventually.be.fulfilled();
           expect(await newsroom.isApproved(id)).to.be.false();
@@ -338,10 +347,11 @@ contract("Newsroom", (accounts: string[]) => {
     });
 
     describe("addRole", () => {
-      before(async () => {
-        await newsroom.addRole(accounts[1], NEWSROOM_ROLE_EDITOR);
-      });
-      pushState(() => {
+      pushState(
+        async () => {
+          await newsroom.addRole(accounts[1], NEWSROOM_ROLE_EDITOR);
+        },
+        () => {
         it("works with superpowers", async () => {
           const addRole = newsroom.addRole(accounts[2], NEWSROOM_ROLE_EDITOR);
 
@@ -376,9 +386,12 @@ contract("Newsroom", (accounts: string[]) => {
 
     describe("removeRole", () => {
       before(async () => {
-        await newsroom.addRole(accounts[1], NEWSROOM_ROLE_EDITOR);
       });
-      pushState(() => {
+      pushState(
+        async () => {
+          await newsroom.addRole(accounts[1], NEWSROOM_ROLE_EDITOR);
+        },
+        () => {
         it("works with superpowers", async () => {
           const removeRole = newsroom.removeRole(accounts[1], NEWSROOM_ROLE_EDITOR);
 

@@ -2,18 +2,26 @@ import * as Web3 from "web3";
 import { rpc } from "@joincivil/utils";
 
 // TODO(ritave): detect if on ganache or not, and replay state before each test if no snapshots
-export function pushState(context: () => void) {
-  let snapshotId: number;
+export function pushState(state: () => Promise<void>|void, context: () => void) {
+  let snapshotRevert: number;
+  let snapshotEach: number;
 
   describe("while pushing state", () => {
+    before(async () => {
+      snapshotRevert = await snapshot();
+      await state();
+    });
     beforeEach(async () => {
-      snapshotId = await snapshot();
+      snapshotEach = await snapshot();
     });
     
     describe("with pushed state", context);
 
     afterEach(async () => {
-      await revert(snapshotId);
+      await revert(snapshotEach);
+    });
+    after(async () => {
+      await revert(snapshotRevert);
     });
   });
 }
