@@ -4,6 +4,7 @@ import * as Web3 from "web3";
 import { ContentProvider } from "./content/contentprovider";
 import { InMemoryProvider } from "./content/inmemoryprovider";
 import { Newsroom } from "./contracts/newsroom";
+import { OwnedAddressTCRWithAppeals } from "./contracts/ownedAddressTCRWithAppeals";
 import { EthAddress, TxHash } from "./types";
 import { Web3Wrapper } from "./utils/web3wrapper";
 
@@ -84,6 +85,17 @@ export class Civil {
   }
 
   /**
+   * Returns a OwnedAddressTCRWithAppeals object, which is an abstraction layer to
+   * the smart-contract located a Ethereum on `address` in the current network.
+   * No sanity checks are done concerning that smart-contracts, and so the contract
+   * might a bad actor or not implementing OwnedAddressTCRWithAppeals ABIs at all.
+   * @param address The address on current Ethereum network where the smart-contract is located
+   */
+  public ownedAddressTCRWithAppealsAtUntrusted(address: EthAddress): OwnedAddressTCRWithAppeals {
+    return OwnedAddressTCRWithAppeals.atUntrusted(this.web3Wrapper, this.contentProvider, address);
+  }
+
+  /**
    * Changes the provider that is used by the Civil library.
    * All existing smart-contract object will switch to the new library behind the scenes.
    * This may invalidate any Ethereum calls in transit or event listening
@@ -91,5 +103,20 @@ export class Civil {
    */
   public setProvider(web3Provider: Web3.Provider): void {
     this.web3Wrapper.setProvider(web3Provider);
+  }
+
+  public async getNetwork(): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      this.web3Wrapper.web3.version.getNetwork((err, netId) => {
+        switch (netId) {
+          case "1":
+            resolve("mainnet");
+          case "4":
+            resolve("rinkeby");
+          default:
+            reject("unknown");
+        }
+      });
+    });
   }
 }
