@@ -6,6 +6,7 @@ import { InMemoryProvider } from "./content/inmemoryprovider";
 import { Newsroom } from "./contracts/newsroom";
 import { OwnedAddressTCRWithAppeals } from "./contracts/ownedAddressTCRWithAppeals";
 import { EthAddress, TxHash, CivilTransactionReceipt } from "./types";
+import { OwnedAddressTCRWithAppeals } from "./contracts/ownedAddressTCRWithAppeals";
 import { Web3Wrapper } from "./utils/web3wrapper";
 import { CivilErrors } from "./utils/errors";
 
@@ -141,5 +142,20 @@ export class Civil {
    */
   public async awaitReceipt(transactionHash: TxHash, blockConfirmations?: number): Promise<CivilTransactionReceipt> {
     return this.web3Wrapper.awaitReceipt(transactionHash, blockConfirmations);
+  }
+
+  public async getNetwork(): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      this.web3Wrapper.web3.version.getNetwork((err, netId) => {
+        switch (netId) {
+          case "1":
+            resolve("mainnet");
+          case "4":
+            resolve("rinkeby");
+          default:
+            reject("unknown");
+        }
+      });
+    });
   }
 }
