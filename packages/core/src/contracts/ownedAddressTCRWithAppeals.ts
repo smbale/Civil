@@ -158,7 +158,9 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     deposit: BigNumber,
     applicationContent: string,
   ): Promise<{txHash: TxHash, awaitReceipt: Promise<CivilTransactionReceipt>}> {
+    console.log("apply.");
     const uri = await this.contentProvider.put(applicationContent);
+    console.log("uri: " + uri);
     return this.applyWithURI(listingAddress, deposit, uri);
   }
 
@@ -173,6 +175,9 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     deposit: BigNumber,
     applicationContentURI: string,
   ): Promise<{txHash: TxHash, awaitReceipt: Promise<CivilTransactionReceipt>}> {
+    console.log("listingAddress: " + listingAddress);
+    console.log("deposit: " + deposit);
+    console.log("applicationContentURI: " + applicationContentURI);
     const txhash = await this.instance.apply.sendTransactionAsync(listingAddress, deposit, applicationContentURI);
     return {txHash: txhash, awaitReceipt: this.web3Wrapper.awaitReceipt(txhash)};
   }
