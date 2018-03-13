@@ -190,9 +190,9 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
   public async deposit(
     listingAddress: EthAddress,
     depositAmount: BigNumber,
-  ): Promise<CivilTransactionReceipt> {
+  ): Promise<{txHash: TxHash, awaitReceipt: Promise<CivilTransactionReceipt>}>  {
     const txhash = await this.instance.deposit.sendTransactionAsync(listingAddress, depositAmount);
-    return this.web3Wrapper.awaitReceipt(txhash);
+    return {txHash: txhash, awaitReceipt: this.web3Wrapper.awaitReceipt(txhash)};
   }
 
   /**
