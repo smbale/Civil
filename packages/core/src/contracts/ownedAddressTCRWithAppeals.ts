@@ -1,14 +1,21 @@
 import { BigNumber } from "bignumber.js";
 import { Observable } from "rxjs";
+import * as Debug from "debug";
 import "rxjs/add/operator/distinctUntilChanged";
 import "@joincivil/utils";
 
 import { ContentProvider } from "../content/contentprovider";
 import { CivilTransactionReceipt, EthAddress, TxHash, TxData } from "../types";
-import { requireAccount } from "../utils/errors";
+import { requireAccount, CivilErrors } from "../utils/errors";
 import { Web3Wrapper } from "../utils/web3wrapper";
 import { BaseWrapper } from "./basewrapper";
 import { OwnedAddressTCRWithAppealsContract } from "./generated/owned_address_t_c_r_with_appeals";
+import { Voting } from "./voting";
+import { EIP20 } from "./eip20";
+import { Parameterizer } from "./parameterizer";
+import { Newsroom } from "./newsroom";
+
+const debug = Debug("civil:OwnedAddressTCRWithAppeals");
 
 /**
  * The OwnedAddressTCRWithAppeals tracks the status of addresses that have been applied and allows
@@ -51,14 +58,62 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
    *                  Set to "latest" for only new events
    * @returns currently Whitelisted addresses
    */
-  public whitelistedAddresses(fromBlock: number|"latest" = 0): Observable<EthAddress> {
+  public whitelistedListings(fromBlock: number|"latest" = 0): Observable<EthAddress> {
+    return this.instance
+      .NewListingWhitelistedStream({}, { fromBlock })
+      .distinctUntilChanged((a, b) => {
+        return a.blockNumber === b.blockNumber && a.logIndex === b.logIndex;
+      })
+      .map((e) => e.args.listingAddress)
+      .concatFilter(async (listingAddress) => this.instance.getListingIsWhitelisted.callAsync(listingAddress));
+  }
+
+  /**
+   * An unending stream of all addresses currently applied
+   * @param fromBlock Starting block in history for events concerning applied addresses.
+   *                  Set to "latest" for only new events
+   * @returns currently applied addresses
+   */
+  public currentAppliedListings(fromBlock: number|"latest" = 0): Observable<EthAddress> {
     return this.instance
       .ApplicationStream({}, { fromBlock })
       .distinctUntilChanged((a, b) => {
         return a.blockNumber === b.blockNumber && a.logIndex === b.logIndex;
       })
       .map((e) => e.args.listingAddress)
-      .concatFilter(async (listingAddress) => this.instance.getListingIsWhitelisted.callAsync(listingAddress));
+      .concatFilter(async (listingAddress) => this.isInUnchallengedApplicationPhase(listingAddress));
+  }
+
+  /**
+   * An unending stream of all addresses currently challenged in commit vote phase
+   * @param fromBlock Starting block in history for events concerning challenged addresses in commit vote phase.
+   *                  Set to "latest" for only new events
+   * @returns currently challenged addresses in commit vote phase
+   */
+  public currentChallengedCommitVotePhaseListings(fromBlock: number|"latest" = 0): Observable<EthAddress> {
+    return this.instance
+      .ChallengeInitiatedStream({}, { fromBlock })
+      .distinctUntilChanged((a, b) => {
+        return a.blockNumber === b.blockNumber && a.logIndex === b.logIndex;
+      })
+      .map((e) => e.args.listingAddress)
+      .concatFilter(async (listingAddress) => this.isInChallengedCommitVotePhase(listingAddress));
+  }
+
+  /**
+   * An unending stream of all addresses currently challenged in reveal vote phase
+   * @param fromBlock Starting block in history for events concerning challenged addresses in reveal vote phase.
+   *                  Set to "latest" for only new events
+   * @returns currently challenged addresses in reveal vote phase
+   */
+  public currentChallengedRevealVotePhaseListings(fromBlock: number|"latest" = 0): Observable<EthAddress> {
+    return this.instance
+      .ChallengeInitiatedStream({}, { fromBlock })
+      .distinctUntilChanged((a, b) => {
+        return a.blockNumber === b.blockNumber && a.logIndex === b.logIndex;
+      })
+      .map((e) => e.args.listingAddress)
+      .concatFilter(async (listingAddress) => this.isInChallengedRevealVotePhase(listingAddress));
   }
 
   /**
@@ -91,10 +146,81 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
   /**
    * Checks if a listing address is whitelisted
    * @param address Address of potential listing to check
-   * @throws {CivilErrors.NoUnlockedAccount} Requires the node to have at least one account if no address provided
    */
   public async isWhitelisted(listingAddress: EthAddress): Promise<boolean> {
     return this.instance.getListingIsWhitelisted.callAsync(listingAddress);
+  }
+
+  /**
+   * Checks if a listing address is in unchallenged application phase
+   * @param listingAddress Address of potential listing to check
+   */
+  public async isInUnchallengedApplicationPhase(listingAddress: EthAddress): Promise<boolean> {
+    let isInApplicationPhase = true;
+
+    // if expiry time has passed
+    const appExpiry = await this.instance.getListingApplicationExpiry.callAsync(listingAddress);
+    const now = (new Date()).getTime() / 1000;
+    if (appExpiry.toNumber() < now) {
+      isInApplicationPhase = false;
+    }
+
+    // if there is a challenge
+    const challenge = await this.instance.getListingChallengeID.callAsync(listingAddress);
+    if (challenge.toNumber() > 0) {
+      isInApplicationPhase = false;
+    }
+    return isInApplicationPhase;
+  }
+
+  /**
+   * Checks if a listing address is in challenged commit vote phase
+   * @param listingAddress Address of potential listing to check
+   */
+  public async isInChallengedCommitVotePhase(listingAddress: EthAddress): Promise<boolean> {
+    let isInCommitPhase = true;
+
+    // if there is no challenge
+    const challenge = await this.instance.getListingChallengeID.callAsync(listingAddress);
+    if (challenge.toNumber() === 0) {
+      isInCommitPhase = false;
+    }
+
+    // if time is correct
+    const voting = Voting.atUntrusted(this.web3Wrapper, await this.instance.voting.callAsync());
+    const commitPeriodActive = await voting.isCommitPeriodActive(challenge);
+    if (!commitPeriodActive) {
+      isInCommitPhase = false;
+    }
+
+    return isInCommitPhase;
+  }
+
+  /**
+   * Checks if a listing address is in challenged commit vote phase
+   * @param listingAddress Address of potential listing to check
+   */
+  public async isInChallengedRevealVotePhase(listingAddress: EthAddress): Promise<boolean> {
+    let isInRevealPhase = true;
+
+    // if there is no challenge
+    const challenge = await this.instance.getListingChallengeID.callAsync(listingAddress);
+    if (challenge.toNumber() === 0) {
+      isInRevealPhase = false;
+    }
+
+    // if time is correct
+    const voting = Voting.atUntrusted(this.web3Wrapper, await this.instance.voting.callAsync());
+    const revealPeriodActive = await voting.isRevealPeriodActive(challenge);
+    if (!revealPeriodActive) {
+      isInRevealPhase = false;
+    }
+
+    return isInRevealPhase;
+  }
+
+  public async getTokenAddress(): Promise<EthAddress> {
+    return this.instance.token.callAsync();
   }
 
   /**
@@ -158,6 +284,41 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     deposit: BigNumber,
     applicationContent: string,
   ): Promise<{txHash: TxHash, awaitReceipt: Promise<CivilTransactionReceipt>}> {
+    const token = EIP20.atUntrusted(this.web3Wrapper, await this.instance.token.callAsync());
+    const approvedTokens = await token.getApprovedTokensForSpender(this.instance.address);
+
+    console.log("approvedTokens: " + approvedTokens);
+    if (approvedTokens < deposit) {
+      console.log("approving spender");
+      await token.approveSpender(this.instance.address, (deposit.sub(approvedTokens)));
+    }
+
+    const isWhitelisted = await this.instance.getListingIsWhitelisted.callAsync(listingAddress);
+    if (isWhitelisted) {
+      console.error("ALREADY WHITELISTED");
+    }
+
+    const appWasMade = await this.instance.appWasMade.callAsync(listingAddress);
+    if (appWasMade) {
+      console.error("APP ALREADY MADE");
+    }
+
+    const parameterizerAddress = await this.instance.parameterizer.callAsync();
+    const parameterizer = await Parameterizer.atUntrusted(this.web3Wrapper, parameterizerAddress);
+
+    const minDeposit = await parameterizer.get("minDeposit");
+    if (deposit < minDeposit) {
+      console.error("DEPOSIT LESS THAN MIN DEPOSIT");
+    }
+    console.log("checks are done.");
+    // require(block.timestamp + parameterizer.get("applyStageLen") > block.timestamp); // avoid overflow
+
+    // Sets owner
+    // Listing storage listing = listings[listingAddress];
+    // listing.owner = msg.sender;
+
+    // Transfers tokens from user to Registry contract
+    // require(token.transferFrom(msg.sender, this, amount));
     const uri = await this.contentProvider.put(applicationContent);
     return this.applyWithURI(listingAddress, deposit, uri);
   }
@@ -173,6 +334,7 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     deposit: BigNumber,
     applicationContentURI: string,
   ): Promise<{txHash: TxHash, awaitReceipt: Promise<CivilTransactionReceipt>}> {
+    await this.requireOwner(listingAddress);
     const txhash = await this.instance.apply.sendTransactionAsync(listingAddress, deposit, applicationContentURI);
     return {txHash: txhash, awaitReceipt: this.web3Wrapper.awaitReceipt(txhash)};
   }
@@ -254,5 +416,18 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
   ): Promise<CivilTransactionReceipt> {
     const txhash = await this.instance.claimReward.sendTransactionAsync(challengeID, salt);
     return this.web3Wrapper.awaitReceipt(txhash);
+  }
+
+  private async requireOwner(newsroom: Newsroom|EthAddress) {
+    let instance: Newsroom;
+    if (typeof newsroom === "string") {
+      instance = Newsroom.atUntrusted(this.web3Wrapper, this.contentProvider, newsroom);
+    } else {
+      instance = newsroom;
+    }
+    if (!(await instance.isOwner(this.web3Wrapper.account))) {
+      debug("Not owner of the newsroom!", this.web3Wrapper.account, newsroom);
+      throw CivilErrors.NoPrivileges;
+    }
   }
 }
