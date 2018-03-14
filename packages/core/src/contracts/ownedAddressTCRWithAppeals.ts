@@ -1,10 +1,12 @@
 import { BigNumber } from "bignumber.js";
 import { Observable } from "rxjs";
+import * as Debug from "debug";
 import "rxjs/add/operator/distinctUntilChanged";
 import "@joincivil/utils";
+
 import { ContentProvider } from "../content/contentprovider";
-import { CivilTransactionReceipt, EthAddress, TxHash } from "../types";
-import { requireAccount } from "../utils/errors";
+import { CivilTransactionReceipt, EthAddress, TxHash, TxData } from "../types";
+import { requireAccount, CivilErrors } from "../utils/errors";
 import { Web3Wrapper } from "../utils/web3wrapper";
 import { BaseWrapper } from "./basewrapper";
 import { OwnedAddressTCRWithAppealsContract } from "./generated/owned_address_t_c_r_with_appeals";
@@ -12,6 +14,8 @@ import { Voting } from "./voting";
 import { EIP20 } from "./eip20";
 import { Parameterizer } from "./parameterizer";
 import { Newsroom } from "./newsroom";
+
+const debug = Debug("civil:OwnedAddressTCRWithAppeals");
 
 /**
  * The OwnedAddressTCRWithAppeals tracks the status of addresses that have been applied and allows
@@ -332,7 +336,6 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     console.log("checks are done.");
     console.log("apply.");
     const uri = await this.contentProvider.put(applicationContent);
-    console.log("uri: " + uri);
     return this.applyWithURI(listingAddress, deposit, uri);
   }
 
@@ -347,9 +350,7 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     deposit: BigNumber,
     applicationContentURI: string,
   ): Promise<{txHash: TxHash, awaitReceipt: Promise<CivilTransactionReceipt>}> {
-    console.log("listingAddress: " + listingAddress);
-    console.log("deposit: " + deposit);
-    console.log("applicationContentURI: " + applicationContentURI);
+    await this.requireOwner(listingAddress);
     const txhash = await this.instance.apply.sendTransactionAsync(listingAddress, deposit, applicationContentURI);
     return {txHash: txhash, awaitReceipt: this.web3Wrapper.awaitReceipt(txhash)};
   }
@@ -431,5 +432,18 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
   ): Promise<CivilTransactionReceipt> {
     const txhash = await this.instance.claimReward.sendTransactionAsync(challengeID, salt);
     return this.web3Wrapper.awaitReceipt(txhash);
+  }
+
+  private async requireOwner(newsroom: Newsroom|EthAddress) {
+    let instance: Newsroom;
+    if (typeof newsroom === "string") {
+      instance = Newsroom.atUntrusted(this.web3Wrapper, this.contentProvider, newsroom);
+    } else {
+      instance = newsroom;
+    }
+    if (!(await instance.isOwner(this.web3Wrapper.account))) {
+      debug("Not owner of the newsroom!", this.web3Wrapper.account, newsroom);
+      throw CivilErrors.NoPrivileges;
+    }
   }
 }
