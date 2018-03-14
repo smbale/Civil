@@ -20,12 +20,13 @@ module.exports = (deployer: any, network: string, accounts: string[]) => {
     if (network !== MAIN_NETWORK) {
       tokenAddress = Token.address;
     }
-
     await deployer.deploy(
       OwnedAddressTCRWithAppeals,
       tokenAddress,
       PLCRVoting.address,
       Parameterizer.address,
+      accounts[0],
+      accounts[0],
     );
     if (inTesting(network)) {
       await approveEverything(accounts, Token.at(tokenAddress), OwnedAddressTCRWithAppeals.address);
