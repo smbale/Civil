@@ -287,16 +287,22 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     if (approvedTokens < deposit) {
       console.log("approving spender");
       await token.approveSpender(this.instance.address, (deposit.sub(approvedTokens)));
+    } else {
+      console.log("no approval needed");
     }
 
     const isWhitelisted = await this.instance.getListingIsWhitelisted.callAsync(listingAddress);
     if (isWhitelisted) {
       console.error("ALREADY WHITELISTED");
+    } else {
+      console.log("passed whitelist check.");
     }
 
     const appWasMade = await this.instance.appWasMade.callAsync(listingAddress);
     if (appWasMade) {
       console.error("APP ALREADY MADE");
+    } else {
+      console.log("passed appWasMade check");
     }
 
     const parameterizerAddress = await this.instance.parameterizer.callAsync();
@@ -305,9 +311,9 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     const minDeposit = await parameterizer.get("minDeposit");
     if (deposit < minDeposit) {
       console.error("DEPOSIT LESS THAN MIN DEPOSIT");
+    } else {
+      console.log("passed minDepost check.");
     }
-    console.log("checks are done.");
-    // require(block.timestamp + parameterizer.get("applyStageLen") > block.timestamp); // avoid overflow
 
     // Sets owner
     // Listing storage listing = listings[listingAddress];
@@ -320,7 +326,10 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
     const isOwner = await newsroom.isOwner(this.web3Wrapper.account);
     if (!isOwner) {
       console.error("ACCOUNT IS NOT OWNER OF NEWSROOM");
+    } else {
+      console.log("passed isOwner check.");
     }
+    console.log("checks are done.");
     console.log("apply.");
     const uri = await this.contentProvider.put(applicationContent);
     console.log("uri: " + uri);
