@@ -10,6 +10,8 @@ import { BaseWrapper } from "./basewrapper";
 import { OwnedAddressTCRWithAppealsContract } from "./generated/owned_address_t_c_r_with_appeals";
 import { Voting } from "./voting";
 import { EIP20 } from "./eip20";
+import { Parameterizer } from "./parameterizer";
+import { Newsroom } from "./newsroom";
 
 /**
  * The OwnedAddressTCRWithAppeals tracks the status of addresses that have been applied and allows
@@ -287,6 +289,38 @@ export class OwnedAddressTCRWithAppeals extends BaseWrapper<OwnedAddressTCRWithA
       await token.approveSpender(this.instance.address, (deposit.sub(approvedTokens)));
     }
 
+    const isWhitelisted = await this.instance.getListingIsWhitelisted.callAsync(listingAddress);
+    if (isWhitelisted) {
+      console.error("ALREADY WHITELISTED");
+    }
+
+    const appWasMade = await this.instance.appWasMade.callAsync(listingAddress);
+    if (appWasMade) {
+      console.error("APP ALREADY MADE");
+    }
+
+    const parameterizerAddress = await this.instance.parameterizer.callAsync();
+    const parameterizer = await Parameterizer.atUntrusted(this.web3Wrapper, parameterizerAddress);
+
+    const minDeposit = await parameterizer.get("minDeposit");
+    if (deposit < minDeposit) {
+      console.error("DEPOSIT LESS THAN MIN DEPOSIT");
+    }
+    console.log("checks are done.");
+    // require(block.timestamp + parameterizer.get("applyStageLen") > block.timestamp); // avoid overflow
+
+    // Sets owner
+    // Listing storage listing = listings[listingAddress];
+    // listing.owner = msg.sender;
+
+    // Transfers tokens from user to Registry contract
+    // require(token.transferFrom(msg.sender, this, amount));
+
+    const newsroom = await Newsroom.atUntrusted(this.web3Wrapper, this.contentProvider, listingAddress);
+    const isOwner = await newsroom.isOwner(this.web3Wrapper.account);
+    if (!isOwner) {
+      console.error("ACCOUNT IS NOT OWNER OF NEWSROOM");
+    }
     console.log("apply.");
     const uri = await this.contentProvider.put(applicationContent);
     console.log("uri: " + uri);
