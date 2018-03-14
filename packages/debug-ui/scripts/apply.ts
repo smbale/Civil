@@ -2,8 +2,8 @@ import { Civil } from "@joincivil/core";
 import BN from "bignumber.js";
 import { EthAddress } from "../../core/build/src/types";
 
-export async function apply(address: EthAddress): Promise<void> {
-    const civil = new Civil();
+export async function apply(address: EthAddress, _civil?: Civil): Promise<void> {
+    const civil = _civil || new Civil();
 
     console.log("Apply to TCR");
     const tcr = await civil.ownedAddressTCRWithAppealsAtUntrusted("0x5aba6b66d796f6f544d915b91c9150a3ec2e7f6a");
